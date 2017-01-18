@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <direct.h>
 #include <iostream>
+#include <memory>
 
 std::string currentDirName() {
     char buffer[FILENAME_MAX];
@@ -14,6 +15,22 @@ std::string currentDirName() {
     return str.substr(pos);
 }
 
+std::string exec(const char *cmd) {
+    char buffer[128];
+    std::string result = "";
+    std::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
+
+    if (!pipe)
+        throw std::runtime_error("popen() failed!");
+
+    while (!feof(pipe.get())) {
+        if (fgets(buffer, 128, pipe.get()) != NULL)
+            result += buffer;
+    }
+
+    return result;
+}
+
 static const char *gitignore =
     "bin/\n"
     "CMakeFiles/\n"
@@ -23,7 +40,7 @@ static const char *gitignore =
     "Makefile\n";
 
 static const char *cmakeLists =
-    "cmake_minimum_required(VERSION 3.7.0)\n"
+    "cmake_minimum_required(VERSION %s)\n"
     "\n"
     "set(CMAKE_COLOR_MAKEFILE off)\n"
     "set(CMAKE_CXX_STANDARD 11)\n"
@@ -72,11 +89,16 @@ int main() {
     std::string dirName = currentDirName();
     const char *dirNameCStr = dirName.c_str();
 
+    std::string version = exec("cmake --version");
+    version = version.substr(version.find_first_of(' ') + 1);
+    version = version.substr(version.find_first_of(' ') + 1);
+    version = version.substr(0, version.find_first_of('\n'));
+
     FILE *gitignoreFile = fopen(".gitignore", "w");
     fprintf(gitignoreFile, gitignore);
 
     FILE *cmakeListsFile = fopen("CMakeLists.txt", "w");
-    fprintf(cmakeListsFile, cmakeLists, dirNameCStr, dirNameCStr);
+    fprintf(cmakeListsFile, cmakeLists, version.c_str(), dirNameCStr, dirNameCStr);
 
     FILE *projectFile = fopen((dirName + ".sublime-project").c_str(), "w");
     fprintf(projectFile, project, dirNameCStr, dirNameCStr, dirNameCStr, dirNameCStr);
